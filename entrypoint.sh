@@ -23,7 +23,7 @@ if [ -n "${GBRAIN_ADMIN_BOOTSTRAP_TOKEN:-}" ]; then
   SUPPRESS_BOOTSTRAP_ARG=(--suppress-bootstrap-token)
 fi
 
-exec gbrain serve --http \
+exec bun /opt/gbrain-src/src/cli.ts serve --http \
   --bind 0.0.0.0 \
   --port "${PORT}" \
   "${PUBLIC_URL_ARG[@]}" \

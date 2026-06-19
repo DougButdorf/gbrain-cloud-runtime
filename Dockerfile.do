@@ -19,8 +19,7 @@ RUN git clone "${GBRAIN_REPO}" /opt/gbrain-src \
   && cd /opt/gbrain-src \
   && git checkout "${GBRAIN_GIT_REF}" \
   && if [ -f /tmp/gbrain-patches/gbrain-local-model-routing.patch ]; then git apply /tmp/gbrain-patches/gbrain-local-model-routing.patch; fi \
-  && bun install -g /opt/gbrain-src \
-  && ln -sf "$(bun pm bin -g)/gbrain" /usr/local/bin/gbrain \
+  && bun install --production \
   && rm -rf /tmp/gbrain-patches
 
 WORKDIR /app
