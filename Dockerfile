@@ -15,13 +15,13 @@ RUN mkdir -p /data/gbrain-home /data/tmp
 
 COPY infra/gbrain-cloud-runtime/patches /tmp/gbrain-patches
 
-RUN git clone "${GBRAIN_REPO}" /tmp/gbrain-src \
-  && cd /tmp/gbrain-src \
+RUN git clone "${GBRAIN_REPO}" /opt/gbrain-src \
+  && cd /opt/gbrain-src \
   && git checkout "${GBRAIN_GIT_REF}" \
   && if [ -f /tmp/gbrain-patches/gbrain-local-model-routing.patch ]; then git apply /tmp/gbrain-patches/gbrain-local-model-routing.patch; fi \
-  && bun install -g /tmp/gbrain-src \
+  && bun install -g /opt/gbrain-src \
   && ln -sf "$(bun pm bin -g)/gbrain" /usr/local/bin/gbrain \
-  && rm -rf /tmp/gbrain-src /tmp/gbrain-patches
+  && rm -rf /tmp/gbrain-patches
 
 WORKDIR /app
 COPY infra/gbrain-cloud-runtime/entrypoint.sh /app/entrypoint.sh
