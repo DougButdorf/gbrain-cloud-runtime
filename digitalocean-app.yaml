@@ -1,0 +1,85 @@
+# DigitalOcean App Platform spec for a no-cutover GBRAIN runtime proof.
+# Do not run this spec with placeholder secret values. Set real secrets through
+# the DO control panel or `doctl apps update --spec` from a private local copy.
+name: gbrain-cloud-runtime
+region: nyc
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+ingress:
+  rules:
+    - component:
+        name: gbrain-serve
+      match:
+        path:
+          prefix: /
+services:
+  - name: gbrain-serve
+    github:
+      repo: DougButdorf/lando-workspace
+      branch: main
+      deploy_on_push: false
+    source_dir: infra/gbrain-cloud-runtime
+    dockerfile_path: infra/gbrain-cloud-runtime/Dockerfile.do
+    run_command: /app/entrypoint.sh
+    http_port: 8765
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 20
+      period_seconds: 15
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+    liveness_health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 5
+      failure_threshold: 5
+    envs:
+      - key: GBRAIN_DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: DEEPSEEK_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GBRAIN_ADMIN_BOOTSTRAP_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GBRAIN_REQUIRE_ADMIN_TOKEN
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_DISABLE_DIRECT_POOL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_HTTP_TRUST_PROXY
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_HTTP_CORS_ORIGIN
+        scope: RUN_TIME
+        type: GENERAL
+        value: https://claude.ai,https://chatgpt.com,https://chat.openai.com
+      - key: GBRAIN_INGEST_MAX_BYTES
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1048576"
+      - key: GBRAIN_PUBLIC_URL
+        scope: RUN_TIME
+        type: GENERAL
+        value: https://REPLACE_AFTER_FIRST_DEPLOY.ondigitalocean.app

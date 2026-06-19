@@ -1,0 +1,45 @@
+diff --git a/src/core/brainstorm/orchestrator.ts b/src/core/brainstorm/orchestrator.ts
+index 3ac7caef..44778502 100644
+--- a/src/core/brainstorm/orchestrator.ts
++++ b/src/core/brainstorm/orchestrator.ts
+@@ -32,7 +32,7 @@
+  */
+ 
+ import type { BrainEngine } from '../engine.ts';
+-import { chat as defaultChat, embedQuery, type ChatResult, type ChatOpts } from '../ai/gateway.ts';
++import { chat as defaultChat, embedQuery, getChatModel, type ChatResult, type ChatOpts } from '../ai/gateway.ts';
+ import { hybridSearch, hybridSearchCached } from '../search/hybrid.ts';
+ import { fetchFar, type CloseRef, type FarPage } from './domain-bank.ts';
+ import { StructuredAgentError } from '../errors.ts';
+@@ -538,7 +538,7 @@ async function _runBrainstormInner(
+   const embedFn = opts.embedQueryFn ?? embedQuery;
+ 
+   // ---- Phase 0: cost preview + TTY grace ----
+-  const modelStr = opts.modelOverride ?? 'anthropic:claude-sonnet-4-6';
++  const modelStr = opts.modelOverride ?? getChatModel();
+   const { aborted, estimate } = await previewCostAndWait({
+     profile,
+     model: modelStr,
+diff --git a/src/core/budget/budget-tracker.ts b/src/core/budget/budget-tracker.ts
+index d5bf44e2..5e983a4a 100644
+--- a/src/core/budget/budget-tracker.ts
++++ b/src/core/budget/budget-tracker.ts
+@@ -31,7 +31,8 @@
+ import { mkdirSync, appendFileSync } from 'node:fs';
+ import { dirname } from 'node:path';
+ import { gbrainPath } from '../config.ts';
+-import { ANTHROPIC_PRICING, type ModelPricing } from '../anthropic-pricing.ts';
++import { ANTHROPIC_PRICING } from '../anthropic-pricing.ts';
++import { canonicalLookup, type ModelPricing } from '../model-pricing.ts';
+ import { EMBEDDING_PRICING, lookupEmbeddingPrice } from '../embedding-pricing.ts';
+ import { splitProviderModelId } from '../model-id.ts';
+ import { isoWeekFilename, resolveAuditDir } from '../audit-week-file.ts';
+@@ -189,6 +190,8 @@ function lookupPricing(modelId: string, kind: BudgetKind): ModelPricing | null {
+   // brainstorm/lsd.
+   const bare = ANTHROPIC_PRICING[modelId];
+   if (bare) return bare;
++  const canonical = canonicalLookup(modelId);
++  if (canonical) return canonical;
+   const { provider: providerId, model: modelTail } = splitProviderModelId(modelId);
+   if (modelTail) {
+     const tailHit = ANTHROPIC_PRICING[modelTail];
