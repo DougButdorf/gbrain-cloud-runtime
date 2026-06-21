@@ -24,7 +24,9 @@ RUN git clone "${GBRAIN_REPO}" /opt/gbrain-src \
 
 WORKDIR /app
 COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+COPY collector-granola-propagation.sh /app/collector-granola-propagation.sh
+COPY collectors /app/collectors
+RUN chmod +x /app/entrypoint.sh /app/collector-granola-propagation.sh /app/collectors/gbrain-granola-propagation.js
 
 EXPOSE 8765
 
