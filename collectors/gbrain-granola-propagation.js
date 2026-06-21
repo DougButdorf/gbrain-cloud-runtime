@@ -9,6 +9,9 @@ try {
 } catch {
   postgres = require(process.env.GBRAIN_POSTGRES_MODULE || '/Users/landokeynes/gbrain/node_modules/postgres');
 }
+if (postgres && typeof postgres !== 'function' && typeof postgres.default === 'function') {
+  postgres = postgres.default;
+}
 
 const DEFAULT_CONFIG = process.env.GBRAIN_CONFIG_PATH || '/Users/landokeynes/.gbrain/config.json';
 const LOCK_KEY = 73170508;
