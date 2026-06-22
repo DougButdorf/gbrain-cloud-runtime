@@ -28,9 +28,10 @@ COPY collector-granola-propagation.sh /app/collector-granola-propagation.sh
 COPY collector-av-m365-shadow.sh /app/collector-av-m365-shadow.sh
 COPY collector-gmail-forward-sync.sh /app/collector-gmail-forward-sync.sh
 COPY collector-calendar-forward-sync.sh /app/collector-calendar-forward-sync.sh
+COPY collector-scheduler-shadow.sh /app/collector-scheduler-shadow.sh
 COPY collectors /app/collectors
 COPY bin /app/bin
-RUN chmod +x /app/entrypoint.sh /app/collector-granola-propagation.sh /app/collector-av-m365-shadow.sh /app/collector-gmail-forward-sync.sh /app/collector-calendar-forward-sync.sh /app/bin/gws-account /app/collectors/gbrain-granola-propagation.js /app/collectors/gbrain-phase7-av-m365-graph-batch.js /app/collectors/gbrain-gmail-forward-sync.js /app/collectors/gbrain-phase7-calendar-checkpoint.js
+RUN chmod +x /app/entrypoint.sh /app/collector-granola-propagation.sh /app/collector-av-m365-shadow.sh /app/collector-gmail-forward-sync.sh /app/collector-calendar-forward-sync.sh /app/collector-scheduler-shadow.sh /app/bin/gws-account /app/collectors/gbrain-granola-propagation.js /app/collectors/gbrain-phase7-av-m365-graph-batch.js /app/collectors/gbrain-gmail-forward-sync.js /app/collectors/gbrain-phase7-calendar-checkpoint.js
 
 EXPOSE 8765
 

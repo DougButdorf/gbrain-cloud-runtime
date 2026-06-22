@@ -184,15 +184,19 @@ workers:
         scope: RUN_TIME
         type: GENERAL
         value: "21600"
-  - name: gbrain-av-m365-shadow
+  - name: gbrain-collector-scheduler-shadow
     git:
       repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
       branch: main
     dockerfile_path: Dockerfile.do
-    run_command: /app/collector-av-m365-shadow.sh
+    run_command: /app/collector-scheduler-shadow.sh
     instance_count: 1
     instance_size_slug: apps-s-1vcpu-0.5gb
     envs:
+      - key: GBRAIN_DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
       - key: M365_TENANT_ID
         scope: RUN_TIME
         type: SECRET
@@ -209,6 +213,22 @@ workers:
         scope: RUN_TIME
         type: GENERAL
         value: "1"
+      - key: GBRAIN_COLLECTOR_SCHEDULER_TICK_SECONDS
+        scope: RUN_TIME
+        type: GENERAL
+        value: "300"
+      - key: GBRAIN_COLLECTOR_ENABLE_AV_M365
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_COLLECTOR_ENABLE_GMAIL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_COLLECTOR_ENABLE_CALENDAR
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
       - key: GBRAIN_PHASE7_AV_M365_MAX
         scope: RUN_TIME
         type: GENERAL
@@ -221,23 +241,10 @@ workers:
         scope: RUN_TIME
         type: GENERAL
         value: "3600"
-  - name: gbrain-gmail-forward-shadow
-    git:
-      repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
-      branch: main
-    dockerfile_path: Dockerfile.do
-    run_command: /app/collector-gmail-forward-sync.sh
-    instance_count: 1
-    instance_size_slug: apps-s-1vcpu-0.5gb
-    envs:
-      - key: GBRAIN_DATABASE_URL
-        scope: RUN_TIME
-        type: SECRET
-        value: REPLACE_IN_DIGITALOCEAN
-      - key: GBRAIN_COLLECTOR_SHADOW
+      - key: GBRAIN_GMAIL_FORWARD_INTERVAL_SECONDS
         scope: RUN_TIME
         type: GENERAL
-        value: "1"
+        value: "1800"
       - key: GBRAIN_GMAIL_FORWARD_MAX
         scope: RUN_TIME
         type: GENERAL
@@ -250,43 +257,10 @@ workers:
         scope: RUN_TIME
         type: GENERAL
         value: /data/collector-runs/gmail-forward
-      - key: GBRAIN_GWS_COMMAND
+      - key: GBRAIN_CALENDAR_FORWARD_INTERVAL_SECONDS
         scope: RUN_TIME
         type: GENERAL
-        value: /app/bin/gws-account
-      - key: GWS_DELEGATED_CREDENTIALS_JSON
-        scope: RUN_TIME
-        type: SECRET
-        value: REPLACE_IN_DIGITALOCEAN
-      - key: GWS_REFRESH_TOKENS_JSON
-        scope: RUN_TIME
-        type: SECRET
-        value: REPLACE_IN_DIGITALOCEAN
-      - key: GOOGLE_OAUTH_CLIENT_ID
-        scope: RUN_TIME
-        type: SECRET
-        value: REPLACE_IN_DIGITALOCEAN
-      - key: GOOGLE_OAUTH_CLIENT_SECRET
-        scope: RUN_TIME
-        type: SECRET
-        value: REPLACE_IN_DIGITALOCEAN
-  - name: gbrain-calendar-forward-shadow
-    git:
-      repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
-      branch: main
-    dockerfile_path: Dockerfile.do
-    run_command: /app/collector-calendar-forward-sync.sh
-    instance_count: 1
-    instance_size_slug: apps-s-1vcpu-0.5gb
-    envs:
-      - key: GBRAIN_DATABASE_URL
-        scope: RUN_TIME
-        type: SECRET
-        value: REPLACE_IN_DIGITALOCEAN
-      - key: GBRAIN_COLLECTOR_SHADOW
-        scope: RUN_TIME
-        type: GENERAL
-        value: "1"
+        value: "21600"
       - key: GBRAIN_CALENDAR_FORWARD_MAX
         scope: RUN_TIME
         type: GENERAL

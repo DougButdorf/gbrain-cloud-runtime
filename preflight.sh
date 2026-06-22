@@ -12,6 +12,23 @@ fi
 cd "${ROOT}"
 
 failures=0
+SECRETS_FILE="${ROOT}/secrets.env"
+if [ ! -f "${SECRETS_FILE}" ] && [ "${RUNTIME_DIR}" = "." ]; then
+  SECRETS_FILE="$(cd "${ROOT}/../.." && pwd)/secrets.env"
+fi
+
+if [ -f "${SECRETS_FILE}" ] && {
+  [ -z "${DIGITALOCEAN_ACCESS_TOKEN:-}" ] ||
+    [ -z "${GBRAIN_DATABASE_URL:-}" ] ||
+    [ -z "${OPENAI_API_KEY:-}" ] ||
+    [ -z "${GOOGLE_GENERATIVE_AI_API_KEY:-}" ] ||
+    [ -z "${GBRAIN_ADMIN_BOOTSTRAP_TOKEN:-}" ]
+}; then
+  set -a
+  # shellcheck disable=SC1091
+  . "${SECRETS_FILE}"
+  set +a
+fi
 
 check() {
   local label="$1"
@@ -50,6 +67,7 @@ check "Granola collector shell syntax" bash -n "${RUNTIME_DIR}/collector-granola
 check "AV M365 collector shell syntax" bash -n "${RUNTIME_DIR}/collector-av-m365-shadow.sh"
 check "Gmail collector shell syntax" bash -n "${RUNTIME_DIR}/collector-gmail-forward-sync.sh"
 check "Calendar collector shell syntax" bash -n "${RUNTIME_DIR}/collector-calendar-forward-sync.sh"
+check "collector scheduler shell syntax" bash -n "${RUNTIME_DIR}/collector-scheduler-shadow.sh"
 check "cloud GWS helper syntax" bash -c "rm -rf /tmp/gbrain-cloud-gws-account-check && bun build '${RUNTIME_DIR}/bin/gws-account' --target bun --outdir /tmp/gbrain-cloud-gws-account-check"
 check "Granola collector JS syntax" node --check "${RUNTIME_DIR}/collectors/gbrain-granola-propagation.js"
 check "AV M365 collector JS syntax" node --check "${RUNTIME_DIR}/collectors/gbrain-phase7-av-m365-graph-batch.js"
