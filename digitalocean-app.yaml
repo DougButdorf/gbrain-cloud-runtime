@@ -15,12 +15,10 @@ ingress:
           prefix: /
 services:
   - name: gbrain-serve
-    github:
-      repo: DougButdorf/lando-workspace
+    git:
+      repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
       branch: main
-      deploy_on_push: false
-    source_dir: infra/gbrain-cloud-runtime
-    dockerfile_path: infra/gbrain-cloud-runtime/Dockerfile.do
+    dockerfile_path: Dockerfile.do
     run_command: /app/entrypoint.sh
     http_port: 8765
     instance_count: 1
@@ -79,7 +77,245 @@ services:
         scope: RUN_TIME
         type: GENERAL
         value: "1048576"
+      - key: GBRAIN_EMBEDDING_MODEL
+        scope: RUN_TIME
+        type: GENERAL
+        value: openai:text-embedding-3-large
+      - key: GBRAIN_EMBEDDING_DIMENSIONS
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1536"
       - key: GBRAIN_PUBLIC_URL
         scope: RUN_TIME
         type: GENERAL
         value: https://REPLACE_AFTER_FIRST_DEPLOY.ondigitalocean.app
+workers:
+  - name: gbrain-worker
+    git:
+      repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
+      branch: main
+    dockerfile_path: Dockerfile.do
+    run_command: bun /opt/gbrain-src/src/cli.ts jobs work --queue default --concurrency 2 --max-rss 512
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: GBRAIN_DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: DEEPSEEK_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GBRAIN_ADMIN_BOOTSTRAP_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GBRAIN_REQUIRE_ADMIN_TOKEN
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_DISABLE_DIRECT_POOL
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_HTTP_TRUST_PROXY
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_HTTP_CORS_ORIGIN
+        scope: RUN_TIME
+        type: GENERAL
+        value: https://claude.ai,https://chatgpt.com,https://chat.openai.com
+      - key: GBRAIN_INGEST_MAX_BYTES
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1048576"
+      - key: GBRAIN_EMBEDDING_MODEL
+        scope: RUN_TIME
+        type: GENERAL
+        value: openai:text-embedding-3-large
+      - key: GBRAIN_EMBEDDING_DIMENSIONS
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1536"
+      - key: GBRAIN_PUBLIC_URL
+        scope: RUN_TIME
+        type: GENERAL
+        value: https://REPLACE_AFTER_FIRST_DEPLOY.ondigitalocean.app
+  - name: gbrain-granola-shadow
+    git:
+      repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
+      branch: main
+    dockerfile_path: Dockerfile.do
+    run_command: /app/collector-granola-propagation.sh
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: GBRAIN_DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GBRAIN_COLLECTOR_SHADOW
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_GRANOLA_PROPAGATION_LIMIT
+        scope: RUN_TIME
+        type: GENERAL
+        value: "50"
+      - key: GBRAIN_GRANOLA_PROPAGATION_MAX_NEW_LINKS
+        scope: RUN_TIME
+        type: GENERAL
+        value: "50"
+      - key: GBRAIN_GRANOLA_PROPAGATION_MAX_NEW_TIMELINES
+        scope: RUN_TIME
+        type: GENERAL
+        value: "50"
+      - key: GBRAIN_GRANOLA_PROPAGATION_INTERVAL_SECONDS
+        scope: RUN_TIME
+        type: GENERAL
+        value: "21600"
+  - name: gbrain-av-m365-shadow
+    git:
+      repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
+      branch: main
+    dockerfile_path: Dockerfile.do
+    run_command: /app/collector-av-m365-shadow.sh
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: M365_TENANT_ID
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: M365_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: M365_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GBRAIN_COLLECTOR_SHADOW
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_PHASE7_AV_M365_MAX
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_PHASE7_AV_M365_SKIP
+        scope: RUN_TIME
+        type: GENERAL
+        value: REPLACE_WITH_CURRENT_AV_M365_SKIP
+      - key: GBRAIN_PHASE7_AV_M365_INTERVAL_SECONDS
+        scope: RUN_TIME
+        type: GENERAL
+        value: "3600"
+  - name: gbrain-gmail-forward-shadow
+    git:
+      repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
+      branch: main
+    dockerfile_path: Dockerfile.do
+    run_command: /app/collector-gmail-forward-sync.sh
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: GBRAIN_DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GBRAIN_COLLECTOR_SHADOW
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_GMAIL_FORWARD_MAX
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_GMAIL_FORWARD_STATE_DIR
+        scope: RUN_TIME
+        type: GENERAL
+        value: /data/collector-state/gmail-forward
+      - key: GBRAIN_GMAIL_FORWARD_OUT_ROOT
+        scope: RUN_TIME
+        type: GENERAL
+        value: /data/collector-runs/gmail-forward
+      - key: GBRAIN_GWS_COMMAND
+        scope: RUN_TIME
+        type: GENERAL
+        value: /app/bin/gws-account
+      - key: GWS_DELEGATED_CREDENTIALS_JSON
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GWS_REFRESH_TOKENS_JSON
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+  - name: gbrain-calendar-forward-shadow
+    git:
+      repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
+      branch: main
+    dockerfile_path: Dockerfile.do
+    run_command: /app/collector-calendar-forward-sync.sh
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    envs:
+      - key: GBRAIN_DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GBRAIN_COLLECTOR_SHADOW
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_CALENDAR_FORWARD_MAX
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_CALENDAR_CHECKPOINT_DAYS
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_CALENDAR_FORWARD_RUN_ROOT
+        scope: RUN_TIME
+        type: GENERAL
+        value: /data/collector-runs/calendar-forward
+      - key: GBRAIN_GWS_COMMAND
+        scope: RUN_TIME
+        type: GENERAL
+        value: /app/bin/gws-account
+      - key: GWS_DELEGATED_CREDENTIALS_JSON
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GWS_REFRESH_TOKENS_JSON
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN

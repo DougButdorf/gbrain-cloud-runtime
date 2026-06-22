@@ -1,7 +1,9 @@
 # GBRAIN Cloud Runtime Day 1
 
-Scope: runtime proof only. This package does not move ingestion, OAuth tokens,
-Telegram sessions, Granola auth, or Mac mini crons.
+Scope: cloud runtime plus staged collector shadow/apply scaffolding. This
+package does not by itself move OAuth tokens, Telegram sessions, or Mac mini
+cron ownership; each collector lane must pass shadow/apply verification before
+its matching Mac fallback is disabled.
 
 ## Recommendation
 
@@ -58,6 +60,16 @@ DigitalOcean-specific files:
   `infra/gbrain-cloud-runtime`.
 - `digitalocean.env.example`: DO variable inventory. Do not commit real values.
 
+Current deployment source:
+
+- DigitalOcean App Platform builds from public repo
+  `https://github.com/DougButdorf/gbrain-cloud-runtime.git`, which contains
+  only this non-secret runtime scaffold.
+- The public repo avoids requiring the DigitalOcean GitHub App to access the
+  private `DougButdorf/lando-workspace` repo.
+- Keep source-of-truth docs in this workspace; mirror runtime-only changes to
+  the public repo before redeploying.
+
 ## Day 1 Commands
 
 Local preflight:
@@ -90,6 +102,12 @@ The committed spec contains placeholder secret values. Before creating the app,
 replace those in a private local copy, or create the app from the control panel
 and paste real secret values there. After the first deploy creates a default
 `ondigitalocean.app` URL, set `GBRAIN_PUBLIC_URL` to that URL and redeploy.
+
+Current proof URL:
+
+```bash
+https://gbrain-cloud-runtime-v2l54.ondigitalocean.app
+```
 
 Railway fallback deploy, only after the CLI is authenticated and Doug has
 approved the external project/spend boundary:
@@ -145,10 +163,10 @@ the bootstrap token into agent MCP configs.
 
 ## Rollback / No Cutover
 
-There is no cutover on Day 1. Leave Mac mini `gbrain serve`, OpenClaw crons,
-OAuth/session files, local state, and ingestion untouched. If the cloud proof
-fails, delete or stop the test service and keep using the existing Mac mini
-runtime.
+There is no bulk cutover. Leave Mac mini collector crons, OAuth/session files,
+and local state in place until the matching cloud collector has secrets,
+cursor/state, shadow parity, one capped apply verification, and rollback.
+If a cloud lane fails, stop that worker and re-enable its exact Mac fallback.
 
 Success means only:
 
@@ -158,10 +176,20 @@ Success means only:
 - a no-expand query returns plausible results;
 - optional read-only MCP `tools/list` works with a registered bearer token.
 
+Current collector scaffolds:
+
+- Granola propagation: cloud apply lane exists; matching Mac fallback can stay
+  disabled only while verification remains green.
+- AV M365: shadow worker scaffold exists; do not enable live until M365 secrets
+  and state are cloud-owned.
+- Gmail forward sync: shadow worker scaffold exists; requires cloud-safe GWS
+  auth and seeded historyId state before live shadow.
+- Google Calendar forward sync: shadow worker scaffold exists; requires
+  cloud-safe GWS auth before live shadow.
+
 Non-goals:
 
-- no cloud ingestion workers;
-- no Mac mini cron cutover;
-- no secret/session migration;
+- no wholesale Mac mini cron cutover;
+- no secret/session migration by committing values;
 - no admin token in third-party agent configs;
-- no cloud shell-job execution.
+- no unverified cloud shell-job execution.

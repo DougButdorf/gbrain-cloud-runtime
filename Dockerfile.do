@@ -25,8 +25,12 @@ RUN git clone "${GBRAIN_REPO}" /opt/gbrain-src \
 WORKDIR /app
 COPY entrypoint.sh /app/entrypoint.sh
 COPY collector-granola-propagation.sh /app/collector-granola-propagation.sh
+COPY collector-av-m365-shadow.sh /app/collector-av-m365-shadow.sh
+COPY collector-gmail-forward-sync.sh /app/collector-gmail-forward-sync.sh
+COPY collector-calendar-forward-sync.sh /app/collector-calendar-forward-sync.sh
 COPY collectors /app/collectors
-RUN chmod +x /app/entrypoint.sh /app/collector-granola-propagation.sh /app/collectors/gbrain-granola-propagation.js
+COPY bin /app/bin
+RUN chmod +x /app/entrypoint.sh /app/collector-granola-propagation.sh /app/collector-av-m365-shadow.sh /app/collector-gmail-forward-sync.sh /app/collector-calendar-forward-sync.sh /app/bin/gws-account /app/collectors/gbrain-granola-propagation.js /app/collectors/gbrain-phase7-av-m365-graph-batch.js /app/collectors/gbrain-gmail-forward-sync.js /app/collectors/gbrain-phase7-calendar-checkpoint.js
 
 EXPOSE 8765
 

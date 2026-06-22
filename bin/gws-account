@@ -1,0 +1,135 @@
+#!/usr/bin/env bun
+import { createSign } from 'node:crypto';
+
+const account = process.argv[2];
+const service = process.argv[3];
+const resourceArgs = process.argv.slice(4);
+
+if (!account || !service || resourceArgs.length === 0) {
+  console.error('Usage: gws-account <email> <gmail|calendar> <resource...> --params <json> --format json');
+  process.exit(64);
+}
+
+const paramsIndex = resourceArgs.indexOf('--params');
+const formatIndex = resourceArgs.indexOf('--format');
+const params = paramsIndex >= 0 ? JSON.parse(resourceArgs[paramsIndex + 1] || '{}') : {};
+const pathParts = resourceArgs.slice(0, [paramsIndex, formatIndex].filter((i) => i >= 0).sort((a, b) => a - b)[0] ?? resourceArgs.length);
+
+function base64url(input) {
+  return Buffer.from(input)
+    .toString('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+}
+
+function readJsonEnv(name) {
+  const raw = process.env[name];
+  if (!raw) return null;
+  return JSON.parse(raw);
+}
+
+async function postForm(url, fields) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(fields),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${url} ${response.status}: ${text.slice(0, 500)}`);
+  return JSON.parse(text);
+}
+
+async function tokenFromRefresh() {
+  const refreshTokens = readJsonEnv('GWS_REFRESH_TOKENS_JSON') || {};
+  const refreshToken = refreshTokens[account];
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  if (!refreshToken || !clientId || !clientSecret) return '';
+  const data = await postForm('https://oauth2.googleapis.com/token', {
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
+  });
+  return data.access_token || '';
+}
+
+async function tokenFromDelegatedServiceAccount() {
+  const key = readJsonEnv('GWS_DELEGATED_CREDENTIALS_JSON');
+  if (!key || !account.endsWith('@outbranch.net')) return '';
+  const scopes = (process.env.GWS_DELEGATED_SCOPES || [
+    'https://www.googleapis.com/auth/gmail.modify',
+    'https://www.googleapis.com/auth/calendar',
+  ].join(' ')).split(/[,\s]+/).filter(Boolean);
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
+  const claim = base64url(JSON.stringify({
+    iss: key.client_email,
+    scope: scopes.join(' '),
+    aud: key.token_uri || 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+    sub: account,
+  }));
+  const signer = createSign('RSA-SHA256');
+  signer.update(`${header}.${claim}`);
+  const signature = signer.sign(key.private_key, 'base64url');
+  const data = await postForm(key.token_uri || 'https://oauth2.googleapis.com/token', {
+    grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+    assertion: `${header}.${claim}.${signature}`,
+  });
+  return data.access_token || '';
+}
+
+async function getToken() {
+  return await tokenFromRefresh() || await tokenFromDelegatedServiceAccount();
+}
+
+function appendParams(url, params) {
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || key === 'userId' || key === 'calendarId') continue;
+    if (Array.isArray(value)) {
+      for (const item of value) url.searchParams.append(key, String(item));
+    } else {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url;
+}
+
+async function getJson(url, token) {
+  const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${url} ${response.status}: ${text.slice(0, 500)}`);
+  return JSON.parse(text || '{}');
+}
+
+async function main() {
+  const token = await getToken();
+  if (!token) throw new Error(`No cloud GWS token source available for ${account}`);
+
+  let url;
+  if (service === 'gmail' && pathParts.join('/') === 'users/getProfile') {
+    const userId = params.userId || 'me';
+    url = new URL(`https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(userId)}/profile`);
+  } else if (service === 'gmail' && pathParts.join('/') === 'users/history/list') {
+    const userId = params.userId || 'me';
+    url = appendParams(new URL(`https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(userId)}/history`), params);
+  } else if (service === 'gmail' && pathParts.join('/') === 'users/messages/get') {
+    const userId = params.userId || 'me';
+    url = appendParams(new URL(`https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(userId)}/messages/${encodeURIComponent(params.id)}`), params);
+  } else if (service === 'calendar' && pathParts.join('/') === 'events/list') {
+    const calendarId = params.calendarId || 'primary';
+    url = appendParams(new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`), params);
+  } else {
+    throw new Error(`Unsupported cloud GWS call: ${service} ${pathParts.join(' ')}`);
+  }
+
+  process.stdout.write(`${JSON.stringify(await getJson(url, token), null, 2)}\n`);
+}
+
+main().catch((error) => {
+  console.error(String(error?.message || error));
+  process.exit(1);
+});

@@ -24,11 +24,14 @@ Railway fallback references:
 
 ## Current Blockers
 
-- DigitalOcean CLI (`doctl`) is installed but not authenticated locally.
-- DigitalOcean App Platform app is not yet created.
+- DigitalOcean CLI (`doctl`) is installed. The DougButdorf account token is in
+  local `secrets.env` as `DIGITALOCEAN_ACCESS_TOKEN`.
+- DigitalOcean App Platform app exists:
+  `794e8d0e-c218-4dea-9ed4-f0bc10cb28f2`.
 - Docker is not installed here, so local image build verification is not available.
-- Secrets are not yet loaded into DigitalOcean App Platform.
-- Public DigitalOcean app URL is not created, so `GBRAIN_PUBLIC_URL` is still a placeholder.
+- Secrets are loaded into DigitalOcean App Platform from a private local spec.
+- Public DigitalOcean app URL:
+  `https://gbrain-cloud-runtime-v2l54.ondigitalocean.app`.
 
 ## One-Time Local Tooling
 
@@ -43,8 +46,10 @@ doctl version
 Authenticate only when Doug is ready to approve/use the DigitalOcean account:
 
 ```bash
-doctl auth init
-doctl account get
+set -a
+source ./secrets.env
+set +a
+doctl --access-token "$DIGITALOCEAN_ACCESS_TOKEN" account get
 ```
 
 Install Railway CLI without agent auto-configuration only if using the fallback:
@@ -84,7 +89,9 @@ chmod +x infra/gbrain-cloud-runtime/preflight.sh
 ./infra/gbrain-cloud-runtime/preflight.sh
 ```
 
-Use DigitalOcean App Platform for the first proof:
+Use DigitalOcean App Platform for the first proof. The committed spec builds
+from public runtime-only repo `DougButdorf/gbrain-cloud-runtime` so DigitalOcean
+does not need GitHub App access to the private workspace repo:
 
 ```bash
 cp infra/gbrain-cloud-runtime/digitalocean-app.yaml /tmp/gbrain-cloud-runtime.do.yaml
@@ -103,12 +110,13 @@ doctl apps logs <app-id> --type run --follow
 
 DigitalOcean App Platform creates a default HTTPS domain ending in
 `ondigitalocean.app`. Set `GBRAIN_PUBLIC_URL` to that URL and redeploy/update the
-app spec once the first deploy is healthy.
+app spec once the first deploy is healthy. Current proof URL is
+`https://gbrain-cloud-runtime-v2l54.ondigitalocean.app`.
 
 The committed spec intentionally uses:
 
-- `source_dir: infra/gbrain-cloud-runtime`
-- `dockerfile_path: infra/gbrain-cloud-runtime/Dockerfile.do`
+- `git.repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git`
+- `dockerfile_path: Dockerfile.do`
 - `http_port: 8765`
 - `/health` readiness and liveness checks
 - `apps-s-1vcpu-0.5gb` for the cheapest proof. Move to
@@ -232,7 +240,7 @@ GBRAIN_BEARER_TOKEN='...' ./infra/gbrain-cloud-runtime/smoke-test.sh "$GBRAIN_PU
 
 ## Connect Agents
 
-Use `gbrain connect` on each machine/tool surface after the Railway endpoint is
+Use `gbrain connect` on each machine/tool surface after the DigitalOcean endpoint is
 healthy and the OAuth client exists.
 
 Codex example:
