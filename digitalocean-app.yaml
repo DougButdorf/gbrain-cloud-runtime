@@ -167,7 +167,7 @@ workers:
       - key: GBRAIN_COLLECTOR_SHADOW
         scope: RUN_TIME
         type: GENERAL
-        value: "1"
+        value: "0"
       - key: GBRAIN_GRANOLA_PROPAGATION_LIMIT
         scope: RUN_TIME
         type: GENERAL
@@ -184,7 +184,7 @@ workers:
         scope: RUN_TIME
         type: GENERAL
         value: "21600"
-  - name: gbrain-collector-scheduler-shadow
+  - name: gbrain-collector-shadow
     git:
       repo_clone_url: https://github.com/DougButdorf/gbrain-cloud-runtime.git
       branch: main
@@ -224,11 +224,11 @@ workers:
       - key: GBRAIN_COLLECTOR_ENABLE_GMAIL
         scope: RUN_TIME
         type: GENERAL
-        value: "1"
+        value: "0"
       - key: GBRAIN_COLLECTOR_ENABLE_CALENDAR
         scope: RUN_TIME
         type: GENERAL
-        value: "1"
+        value: "0"
       - key: GBRAIN_PHASE7_AV_M365_MAX
         scope: RUN_TIME
         type: GENERAL
@@ -236,7 +236,7 @@ workers:
       - key: GBRAIN_PHASE7_AV_M365_SKIP
         scope: RUN_TIME
         type: GENERAL
-        value: REPLACE_WITH_CURRENT_AV_M365_SKIP
+        value: "1545"
       - key: GBRAIN_PHASE7_AV_M365_INTERVAL_SECONDS
         scope: RUN_TIME
         type: GENERAL

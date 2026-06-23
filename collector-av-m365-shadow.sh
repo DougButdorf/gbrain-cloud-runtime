@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${GBRAIN_COLLECTOR_APP_DIR:-/app}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${GBRAIN_COLLECTOR_APP_DIR:-}" ]]; then
+  APP_DIR="$GBRAIN_COLLECTOR_APP_DIR"
+elif [[ -d /app/collectors ]]; then
+  APP_DIR="/app"
+else
+  APP_DIR="$SCRIPT_DIR"
+fi
 MAILBOX="${GBRAIN_PHASE7_AV_M365_MAILBOX:-doug@advancedvirology.com}"
 MAX="${GBRAIN_PHASE7_AV_M365_MAX:-1}"
 SKIP="${GBRAIN_PHASE7_AV_M365_SKIP:-0}"
