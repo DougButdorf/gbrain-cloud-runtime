@@ -4,6 +4,13 @@ const { dirname, join } = require('path');
 const { createHash } = require('crypto');
 const { execFileSync } = require('child_process');
 const { tmpdir } = require('os');
+const {
+  CollectorState,
+  enabledFromEnv: collectorStateEnabledFromEnv,
+  loadJsonFile,
+  makeRunId,
+  saveJsonFile,
+} = require('./lib/collector-state');
 
 const HOME = process.env.GBRAIN_COLLECTOR_HOME || process.env.HOME || '/Users/landokeynes';
 const workspace = process.env.GBRAIN_WORKSPACE || '/Users/landokeynes/.openclaw/workspace';
@@ -12,7 +19,7 @@ const tokenFile = process.env.AV_M365_GRAPH_TOKEN_FILE || join(workspace, 'secre
 const mailbox = process.argv[2] || 'doug@advancedvirology.com';
 const max = Number(process.argv[3] || process.env.GBRAIN_PHASE7_AV_M365_MAX || '150');
 const outDir = process.argv[4] || process.env.GBRAIN_PHASE7_AV_M365_OUT_DIR || join(HOME, 'gbrain-phase7/runtime-controlled/av-m365-graph-rolling');
-const skip = Number(process.argv[5] || process.env.GBRAIN_PHASE7_AV_M365_SKIP || '0');
+let skip = Number(process.argv[5] || process.env.GBRAIN_PHASE7_AV_M365_SKIP || '0');
 const maxBodyChars = Number(process.env.GBRAIN_FULL_EMAIL_MAX_BODY_CHARS || '12000');
 const since = process.env.GBRAIN_PHASE7_AV_M365_SINCE || '';
 const stateRoot = process.env.GBRAIN_PHASE7_STATE_ROOT || join(HOME, 'gbrain-phase7/runtime-controlled/state');
@@ -21,6 +28,9 @@ const messageStateFile = process.env.GBRAIN_PHASE7_AV_M365_MESSAGE_STATE_FILE ||
 const deferMessageState = process.env.GBRAIN_DEFER_MESSAGE_STATE === '1';
 const shadow = process.env.GBRAIN_COLLECTOR_SHADOW === '1' || process.env.GBRAIN_STATE_READ_ONLY === '1';
 const extractor = process.env.GBRAIN_READABLE_ATTACHMENT_EXTRACTOR || join(workspace, 'ops/lib/readable_attachment_extract.py');
+const lane = process.env.GBRAIN_COLLECTOR_LANE || 'av_m365';
+const runId = process.env.GBRAIN_COLLECTOR_RUN_ID || makeRunId(lane);
+const useCollectorState = collectorStateEnabledFromEnv();
 
 function loadEnv(path) {
   if (!existsSync(path)) return;
@@ -84,16 +94,11 @@ function capBody(s) {
 }
 
 function loadJson(file, fallback) {
-  try {
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return fallback;
-  }
+  return loadJsonFile(file, fallback);
 }
 
 function saveJson(file, value) {
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify(value, null, 2), { mode: 0o600 });
+  saveJsonFile(file, value);
 }
 
 function sha256(buffer) {
@@ -322,6 +327,8 @@ async function processPdfAttachments(token, outDir, mailbox, msg, seenHashes) {
 
 async function main() {
   loadEnv(envFile);
+  const collectorState = new CollectorState();
+  let collectorStateSource = 'file';
   let token;
   try {
     token = JSON.parse(readFileSync(tokenFile, 'utf8'));
@@ -333,10 +340,24 @@ async function main() {
 
   mkdirSync(join(outDir, 'emails'), { recursive: true });
 
-  const messageState = since ? loadJson(messageStateFile, {}) : {};
+  if (useCollectorState) {
+    const skipState = await collectorState.getState(lane, 'skip', null);
+    if (skipState && skipState.value !== undefined && skipState.value !== null) {
+      skip = Number(skipState.value) || 0;
+      collectorStateSource = 'postgres';
+    }
+  }
+
+  const fileMessageState = since ? loadJson(messageStateFile, {}) : {};
+  const fileAttachmentHashes = loadJson(attachmentStateFile, {});
+  const messageState = since && useCollectorState
+    ? await collectorState.getState(lane, 'message_ids', fileMessageState)
+    : fileMessageState;
   const messages = await listMessages(token, messageState);
   const written = [];
-  const attachmentHashes = loadJson(attachmentStateFile, {});
+  const attachmentHashes = useCollectorState
+    ? await collectorState.getState(lane, 'attachment_sha256', fileAttachmentHashes)
+    : fileAttachmentHashes;
   const processedMessages = {};
 
   for (const msg of messages) {
@@ -381,6 +402,9 @@ async function main() {
   }
   const attachmentStateWritten = !shadow;
   const messageStateWritten = since && !shadow;
+  if (!shadow && useCollectorState) {
+    await collectorState.putState(lane, 'attachment_sha256', attachmentHashes, runId);
+  }
   if (!shadow) saveJson(attachmentStateFile, attachmentHashes);
   if (since) {
     if (shadow) {
@@ -388,9 +412,46 @@ async function main() {
     } else if (deferMessageState) {
       saveJson(join(outDir, 'PHASE7_AV_M365_MESSAGE_STATE_PENDING.json'), processedMessages);
     } else {
+      if (useCollectorState) await collectorState.putState(lane, 'message_ids', messageState, runId);
       saveJson(messageStateFile, messageState);
     }
   }
+  if (!shadow && !since && useCollectorState) {
+    await collectorState.putState(lane, 'skip', {
+      value: skip + messages.length,
+      previousValue: skip,
+      mailbox,
+      messageCount: messages.length,
+      updatedBy: 'gbrain-phase7-av-m365-graph-batch',
+    }, runId);
+  }
+  const stateAdvanced = !shadow && !since && useCollectorState;
+
+  const pendingCollectorState = {
+    lane,
+    runId,
+    mailbox,
+    shadow,
+    since,
+    skip,
+    nextSkip: skip + messages.length,
+    messageCount: messages.length,
+    fileCount: written.length,
+    createdAt: new Date().toISOString(),
+    rows: {
+      skip: since ? null : {
+        value: skip + messages.length,
+        previousValue: skip,
+        mailbox,
+        messageCount: messages.length,
+        fileCount: written.length,
+        updatedBy: 'gbrain-phase7-av-m365-live-verifier',
+      },
+      attachment_sha256: attachmentHashes,
+      message_ids: since ? messageState : null,
+    },
+  };
+  saveJson(join(outDir, 'PHASE7_AV_M365_COLLECTOR_STATE_PENDING.json'), pendingCollectorState);
 
   writeFileSync(join(outDir, 'PHASE7_AV_M365_GRAPH_BATCH.md'), `# Phase 7 AV M365 Graph Full-Body Batch\n\nAccount: ${mailbox}\n\nSource: Microsoft Graph delegated OAuth\n\nSkip used: ${skip}\n\nSince used: ${since || 'not set'}\n\nMessages returned: ${messages.length}\n\nScope: Advanced Virology Outlook full-body messages plus readable PDF attachment text only. Other attachment types are intentionally skipped for AV.\n\nFiles:\n${written.map((p) => `- ${p}`).join('\n')}\n`, { mode: 0o600 });
 
@@ -404,12 +465,16 @@ async function main() {
     since,
     nextSkip: skip + messages.length,
     shadow,
-    stateAdvanced: false,
+    stateAdvanced,
     attachmentStateWritten,
     messageStateWritten,
+    collectorStateEnabled: useCollectorState,
+    collectorStateSource,
+    runId,
     stateRoot,
     files: written,
   }, null, 2));
+  await collectorState.close();
 }
 
 main().catch((error) => {
