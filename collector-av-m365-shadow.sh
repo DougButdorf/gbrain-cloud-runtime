@@ -60,15 +60,15 @@ run_once() {
 
   pending_file="$out_dir/PHASE7_AV_M365_COLLECTOR_STATE_PENDING.json"
   if [[ "$requested_shadow" != "1" ]]; then
-    node - "$result_file" "$import_dir" <<'NODE'
-const fs = require('fs');
-const path = require('path');
-const [resultPath, importDir] = process.argv.slice(2);
-const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+    bun -e '
+const fs = require("fs");
+const path = require("path");
+const [resultPath, importDir] = process.argv.slice(1);
+const result = JSON.parse(fs.readFileSync(resultPath, "utf8"));
 for (const file of result.files || []) {
   fs.copyFileSync(file, path.join(importDir, path.basename(file)));
 }
-NODE
+' "$result_file" "$import_dir"
     if find "$import_dir" -type f | grep -q .; then
       run_with_timeout "$IMPORT_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts import "$import_dir" --no-embed
       run_with_timeout "$EMBED_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts embed --stale
