@@ -47,7 +47,8 @@ run_lane() {
     return 0
   fi
 
-  local status=$?
+  local status
+  status=$?
   printf '{"event":"collector_scheduler_lane_complete","lane":"%s","ok":false,"exit_code":%s,"ts":"%s"}\n' \
     "$lane" "$status" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
   mark_run "$lane"

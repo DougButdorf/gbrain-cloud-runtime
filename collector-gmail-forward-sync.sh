@@ -22,38 +22,16 @@ fi
 run_with_timeout() {
   local seconds="$1"
   shift
-  python3 - "$seconds" "$@" <<'PY'
-import os, signal, subprocess, sys
-seconds = int(sys.argv[1])
-cmd = sys.argv[2:]
-proc = subprocess.Popen(cmd, start_new_session=True)
-try:
-    raise SystemExit(proc.wait(timeout=seconds))
-except subprocess.TimeoutExpired:
-    print("GBRAIN_GMAIL_FORWARD_TIMEOUT seconds=%s command=%s" % (seconds, cmd[0]), flush=True)
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-    try:
-        proc.wait(timeout=15)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        proc.wait()
-    raise SystemExit(124)
-PY
+  timeout "$seconds" "$@"
 }
 
-node "$COLLECTOR_SCRIPT" > "$RESULT_FILE"
-IMPORT_DIR="$(node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('$RESULT_FILE','utf8')); process.stdout.write(r.importDir || '')")"
-FILES_COUNT="$(node -e "const fs=require('fs'); const r=JSON.parse(fs.readFileSync('$RESULT_FILE','utf8')); process.stdout.write(String((r.files||[]).length))")"
+bun "$COLLECTOR_SCRIPT" > "$RESULT_FILE"
+IMPORT_DIR="$(bun -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(r.importDir || "")' "$RESULT_FILE")"
+FILES_COUNT="$(bun -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String((r.files||[]).length))' "$RESULT_FILE")"
 
 if [[ "$FILES_COUNT" != "0" && "$SHADOW" != "1" ]]; then
-  run_with_timeout "$IMPORT_TIMEOUT_SECONDS" env HOME="$HOME" gbrain import "$IMPORT_DIR" --no-embed >/tmp/gbrain-gmail-forward-import.log 2>&1
-  run_with_timeout "$EMBED_TIMEOUT_SECONDS" env HOME="$HOME" gbrain embed --stale >/tmp/gbrain-gmail-forward-embed.log 2>&1
+  run_with_timeout "$IMPORT_TIMEOUT_SECONDS" env HOME="$HOME" bun /opt/gbrain-src/src/cli.ts import "$IMPORT_DIR" --no-embed >/tmp/gbrain-gmail-forward-import.log 2>&1
+  run_with_timeout "$EMBED_TIMEOUT_SECONDS" env HOME="$HOME" bun /opt/gbrain-src/src/cli.ts embed --stale >/tmp/gbrain-gmail-forward-embed.log 2>&1
 fi
 
 if [[ "$SHADOW" != "1" ]]; then
@@ -64,11 +42,9 @@ if [[ "$SHADOW" != "1" ]]; then
   done
 fi
 
-node - "$RESULT_FILE" <<'NODE'
-const fs = require('fs');
-const r = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const accounts = (r.accounts || []).map(a => a.account + ':written=' + a.written).join(' ');
-const baselines = (r.baselineOnly || []).map(a => a.account).join(',');
-const errors = (r.accountErrors || []).map(e => e.account).join(',');
-console.log(('GBRAIN_GMAIL_FORWARD_OK shadow=' + (r.shadow ? '1' : '0') + ' files=' + (r.files || []).length + ' baselined=' + (baselines || 'none') + ' errors=' + (errors || 'none') + ' ' + accounts).trim());
-NODE
+bun -e 'const fs = require("fs");
+const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const accounts = (r.accounts || []).map(a => a.account + ":written=" + a.written).join(" ");
+const baselines = (r.baselineOnly || []).map(a => a.account).join(",");
+const errors = (r.accountErrors || []).map(e => e.account).join(",");
+console.log(("GBRAIN_GMAIL_FORWARD_OK shadow=" + (r.shadow ? "1" : "0") + " files=" + (r.files || []).length + " baselined=" + (baselines || "none") + " errors=" + (errors || "none") + " " + accounts).trim());' "$RESULT_FILE"
