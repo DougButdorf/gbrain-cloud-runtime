@@ -19,6 +19,8 @@ if [[ -f "$ENV_FILE" ]]; then
   set +a
 fi
 
+export GBRAIN_WORKSPACE="$WORKSPACE"
+
 run_with_timeout() {
   local seconds="$1"
   shift
