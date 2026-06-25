@@ -35,12 +35,13 @@ mark_run() {
 
 run_lane() {
   local lane="$1"
-  shift
+  local lane_shadow="$2"
+  shift 2
 
   printf '{"event":"collector_scheduler_lane_start","lane":"%s","shadow":"%s","ts":"%s"}\n' \
-    "$lane" "$GBRAIN_COLLECTOR_SHADOW" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    "$lane" "$lane_shadow" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  if "$@"; then
+  if env GBRAIN_COLLECTOR_SHADOW="$lane_shadow" "$@"; then
     printf '{"event":"collector_scheduler_lane_complete","lane":"%s","ok":true,"ts":"%s"}\n' \
       "$lane" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     mark_run "$lane"
@@ -59,15 +60,15 @@ run_due_lanes_once() {
   local failures=0
 
   if [[ "${GBRAIN_COLLECTOR_ENABLE_AV_M365:-1}" == "1" ]] && should_run "av_m365" "${GBRAIN_PHASE7_AV_M365_INTERVAL_SECONDS:-3600}"; then
-    run_lane "av_m365" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-av-m365-shadow.sh" || failures=$((failures + 1))
+    run_lane "av_m365" "${GBRAIN_AV_M365_SHADOW:-$GBRAIN_COLLECTOR_SHADOW}" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-av-m365-shadow.sh" || failures=$((failures + 1))
   fi
 
   if [[ "${GBRAIN_COLLECTOR_ENABLE_GMAIL:-1}" == "1" ]] && should_run "gmail_forward" "${GBRAIN_GMAIL_FORWARD_INTERVAL_SECONDS:-1800}"; then
-    run_lane "gmail_forward" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-gmail-forward-sync.sh" || failures=$((failures + 1))
+    run_lane "gmail_forward" "${GBRAIN_GMAIL_FORWARD_SHADOW:-1}" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-gmail-forward-sync.sh" || failures=$((failures + 1))
   fi
 
   if [[ "${GBRAIN_COLLECTOR_ENABLE_CALENDAR:-1}" == "1" ]] && should_run "calendar_forward" "${GBRAIN_CALENDAR_FORWARD_INTERVAL_SECONDS:-21600}"; then
-    run_lane "calendar_forward" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-calendar-forward-sync.sh" || failures=$((failures + 1))
+    run_lane "calendar_forward" "${GBRAIN_CALENDAR_FORWARD_SHADOW:-1}" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-calendar-forward-sync.sh" || failures=$((failures + 1))
   fi
 
   return "$failures"
