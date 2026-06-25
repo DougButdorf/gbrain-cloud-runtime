@@ -209,7 +209,15 @@ workers:
         scope: RUN_TIME
         type: SECRET
         value: REPLACE_IN_DIGITALOCEAN
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_IN_DIGITALOCEAN
       - key: GBRAIN_COLLECTOR_SHADOW
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1"
+      - key: GBRAIN_COLLECTOR_STATE_ENABLED
         scope: RUN_TIME
         type: GENERAL
         value: "1"
@@ -236,11 +244,19 @@ workers:
       - key: GBRAIN_PHASE7_AV_M365_SKIP
         scope: RUN_TIME
         type: GENERAL
-        value: "1545"
+        value: "2325"
       - key: GBRAIN_PHASE7_AV_M365_INTERVAL_SECONDS
         scope: RUN_TIME
         type: GENERAL
         value: "3600"
+      - key: GBRAIN_EMBEDDING_MODEL
+        scope: RUN_TIME
+        type: GENERAL
+        value: openai:text-embedding-3-large
+      - key: GBRAIN_EMBEDDING_DIMENSIONS
+        scope: RUN_TIME
+        type: GENERAL
+        value: "1536"
       - key: GBRAIN_GMAIL_FORWARD_INTERVAL_SECONDS
         scope: RUN_TIME
         type: GENERAL

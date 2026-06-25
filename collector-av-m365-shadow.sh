@@ -36,14 +36,16 @@ run_with_timeout() {
 }
 
 run_once() {
-  local out_dir import_dir result_file pending_file requested_shadow
+  local out_dir import_dir result_file import_log embed_log pending_file requested_shadow
   out_dir="${GBRAIN_PHASE7_AV_M365_OUT_DIR:-$(mktemp -d /tmp/gbrain-av-m365-shadow.XXXXXX)}"
   import_dir="$(mktemp -d /tmp/gbrain-av-m365-import.XXXXXX)"
   result_file="$(mktemp /tmp/gbrain-av-m365-result.XXXXXX)"
+  import_log="$(mktemp /tmp/gbrain-av-m365-import-log.XXXXXX)"
+  embed_log="$(mktemp /tmp/gbrain-av-m365-embed-log.XXXXXX)"
   requested_shadow="$REQUESTED_SHADOW"
 
   cleanup_run() {
-    rm -f "$result_file"
+    rm -f "$result_file" "$import_log" "$embed_log"
     rm -rf "$import_dir"
     if [[ -z "${GBRAIN_PHASE7_AV_M365_OUT_DIR:-}" ]]; then
       rm -rf "$out_dir"
@@ -70,8 +72,18 @@ for (const file of result.files || []) {
 }
 ' "$result_file" "$import_dir"
     if find "$import_dir" -type f | grep -q .; then
-      run_with_timeout "$IMPORT_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts import "$import_dir" --no-embed
-      run_with_timeout "$EMBED_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts embed --stale
+      run_with_timeout "$IMPORT_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts import "$import_dir" --no-embed >"$import_log" 2>&1
+      cat "$import_log"
+      if grep -Eq 'errors=[1-9]|[1-9][0-9]* errors|ERROR|Error:' "$import_log"; then
+        printf '{"event":"av_m365_apply_import_failed","ok":false,"ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+        return 1
+      fi
+      run_with_timeout "$EMBED_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts embed --stale >"$embed_log" 2>&1
+      cat "$embed_log"
+      if grep -Eiq 'requires .*API_KEY|missing .*API_KEY|ERROR|Error:|failed|failure' "$embed_log"; then
+        printf '{"event":"av_m365_apply_embed_failed","ok":false,"ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+        return 1
+      fi
     else
       printf '{"event":"av_m365_apply_import_skipped","reason":"no_files","ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     fi
