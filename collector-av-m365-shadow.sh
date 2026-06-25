@@ -74,7 +74,7 @@ for (const file of result.files || []) {
     if find "$import_dir" -type f | grep -q .; then
       run_with_timeout "$IMPORT_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts import "$import_dir" --no-embed >"$import_log" 2>&1
       cat "$import_log"
-      if grep -Eq 'errors=[1-9]|[1-9][0-9]* errors|ERROR|Error:' "$import_log"; then
+      if grep -Eq 'errors=[1-9][0-9]*|, [1-9][0-9]* errors\)|ERROR|Error:' "$import_log"; then
         printf '{"event":"av_m365_apply_import_failed","ok":false,"ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
         return 1
       fi
