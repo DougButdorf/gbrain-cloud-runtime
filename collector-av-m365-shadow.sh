@@ -12,10 +12,11 @@ fi
 MAILBOX="${GBRAIN_PHASE7_AV_M365_MAILBOX:-doug@advancedvirology.com}"
 MAX="${GBRAIN_PHASE7_AV_M365_MAX:-1}"
 SKIP="${GBRAIN_PHASE7_AV_M365_SKIP:-0}"
-OUT_DIR="${GBRAIN_PHASE7_AV_M365_OUT_DIR:-$(mktemp -d /tmp/gbrain-av-m365-shadow.XXXXXX)}"
 INTERVAL_SECONDS="${GBRAIN_PHASE7_AV_M365_INTERVAL_SECONDS:-3600}"
+REQUESTED_SHADOW="${GBRAIN_COLLECTOR_SHADOW:-1}"
+IMPORT_TIMEOUT_SECONDS="${GBRAIN_PHASE7_IMPORT_TIMEOUT_SECONDS:-900}"
+EMBED_TIMEOUT_SECONDS="${GBRAIN_PHASE7_EMBED_TIMEOUT_SECONDS:-900}"
 
-export GBRAIN_COLLECTOR_SHADOW="${GBRAIN_COLLECTOR_SHADOW:-1}"
 export GBRAIN_COLLECTOR_STATE_ENABLED="${GBRAIN_COLLECTOR_STATE_ENABLED:-1}"
 export GBRAIN_WORKSPACE="${GBRAIN_WORKSPACE:-$APP_DIR}"
 export GBRAIN_COLLECTOR_HOME="${GBRAIN_COLLECTOR_HOME:-/tmp/gbrain-collector}"
@@ -26,13 +27,58 @@ export GBRAIN_PHASE7_STATE_ROOT="${GBRAIN_PHASE7_STATE_ROOT:-/tmp/gbrain-av-m365
 export GBRAIN_PHASE7_AV_M365_ATTACHMENT_STATE_FILE="${GBRAIN_PHASE7_AV_M365_ATTACHMENT_STATE_FILE:-/tmp/gbrain-av-m365-attachment-state.json}"
 export GBRAIN_PHASE7_AV_M365_MESSAGE_STATE_FILE="${GBRAIN_PHASE7_AV_M365_MESSAGE_STATE_FILE:-/tmp/gbrain-av-m365-message-state.json}"
 
-mkdir -p "$GBRAIN_COLLECTOR_HOME" "$GBRAIN_PHASE7_STATE_ROOT" "$(dirname "$GBRAIN_PHASE7_AV_M365_ATTACHMENT_STATE_FILE")" "$OUT_DIR"
+mkdir -p "$GBRAIN_COLLECTOR_HOME" "$GBRAIN_PHASE7_STATE_ROOT" "$(dirname "$GBRAIN_PHASE7_AV_M365_ATTACHMENT_STATE_FILE")"
+
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  timeout "$seconds" "$@"
+}
 
 run_once() {
-  printf '{"event":"av_m365_shadow_start","mailbox":"%s","max":%s,"skip":%s,"ts":"%s"}\n' \
-    "$MAILBOX" "$MAX" "$SKIP" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  bun "$APP_DIR/collectors/gbrain-phase7-av-m365-graph-batch.js" "$MAILBOX" "$MAX" "$OUT_DIR" "$SKIP"
-  printf '{"event":"av_m365_shadow_complete","ok":true,"ts":"%s"}\n' \
+  local out_dir import_dir result_file pending_file requested_shadow
+  out_dir="${GBRAIN_PHASE7_AV_M365_OUT_DIR:-$(mktemp -d /tmp/gbrain-av-m365-shadow.XXXXXX)}"
+  import_dir="$(mktemp -d /tmp/gbrain-av-m365-import.XXXXXX)"
+  result_file="$(mktemp /tmp/gbrain-av-m365-result.XXXXXX)"
+  requested_shadow="$REQUESTED_SHADOW"
+
+  cleanup_run() {
+    rm -f "$result_file"
+    rm -rf "$import_dir"
+    if [[ -z "${GBRAIN_PHASE7_AV_M365_OUT_DIR:-}" ]]; then
+      rm -rf "$out_dir"
+    fi
+  }
+  trap cleanup_run RETURN
+
+  printf '{"event":"av_m365_apply_start","mailbox":"%s","max":%s,"skip":%s,"apply":%s,"ts":"%s"}\n' \
+    "$MAILBOX" "$MAX" "$SKIP" "$([[ "$requested_shadow" == "1" ]] && printf false || printf true)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  GBRAIN_COLLECTOR_SHADOW=1 GBRAIN_DEFER_MESSAGE_STATE=1 \
+    bun "$APP_DIR/collectors/gbrain-phase7-av-m365-graph-batch.js" "$MAILBOX" "$MAX" "$out_dir" "$SKIP" >"$result_file"
+  cat "$result_file"
+
+  pending_file="$out_dir/PHASE7_AV_M365_COLLECTOR_STATE_PENDING.json"
+  if [[ "$requested_shadow" != "1" ]]; then
+    node - "$result_file" "$import_dir" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [resultPath, importDir] = process.argv.slice(2);
+const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+for (const file of result.files || []) {
+  fs.copyFileSync(file, path.join(importDir, path.basename(file)));
+}
+NODE
+    if find "$import_dir" -type f | grep -q .; then
+      run_with_timeout "$IMPORT_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts import "$import_dir" --no-embed
+      run_with_timeout "$EMBED_TIMEOUT_SECONDS" bun /opt/gbrain-src/src/cli.ts embed --stale
+    else
+      printf '{"event":"av_m365_apply_import_skipped","reason":"no_files","ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    fi
+    bun "$APP_DIR/collectors/gbrain-av-m365-collector-state-apply-pending.js" --apply --json "$pending_file"
+  fi
+
+  printf '{"event":"av_m365_apply_complete","ok":true,"ts":"%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 
