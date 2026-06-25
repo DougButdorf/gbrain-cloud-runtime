@@ -83,7 +83,22 @@ async function tokenFromDelegatedServiceAccount() {
 }
 
 async function getToken() {
-  return await tokenFromRefresh() || await tokenFromDelegatedServiceAccount();
+  const attempts = account.endsWith('@outbranch.net')
+    ? [tokenFromDelegatedServiceAccount, tokenFromRefresh]
+    : [tokenFromRefresh, tokenFromDelegatedServiceAccount];
+  const errors = [];
+  for (const attempt of attempts) {
+    try {
+      const token = await attempt();
+      if (token) return token;
+    } catch (error) {
+      errors.push(String(error?.message || error));
+    }
+  }
+  if (errors.length) {
+    throw new Error(`No cloud GWS token source succeeded for ${account}: ${errors.join(' | ').slice(0, 700)}`);
+  }
+  return '';
 }
 
 function appendParams(url, params) {
