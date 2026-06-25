@@ -58,15 +58,15 @@ run_due_lanes_once() {
   local failures=0
 
   if [[ "${GBRAIN_COLLECTOR_ENABLE_AV_M365:-1}" == "1" ]] && should_run "av_m365" "${GBRAIN_PHASE7_AV_M365_INTERVAL_SECONDS:-3600}"; then
-    run_lane "av_m365" "$APP_DIR/collector-av-m365-shadow.sh" || failures=$((failures + 1))
+    run_lane "av_m365" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-av-m365-shadow.sh" || failures=$((failures + 1))
   fi
 
   if [[ "${GBRAIN_COLLECTOR_ENABLE_GMAIL:-1}" == "1" ]] && should_run "gmail_forward" "${GBRAIN_GMAIL_FORWARD_INTERVAL_SECONDS:-1800}"; then
-    run_lane "gmail_forward" "$APP_DIR/collector-gmail-forward-sync.sh" || failures=$((failures + 1))
+    run_lane "gmail_forward" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-gmail-forward-sync.sh" || failures=$((failures + 1))
   fi
 
   if [[ "${GBRAIN_COLLECTOR_ENABLE_CALENDAR:-1}" == "1" ]] && should_run "calendar_forward" "${GBRAIN_CALENDAR_FORWARD_INTERVAL_SECONDS:-21600}"; then
-    run_lane "calendar_forward" "$APP_DIR/collector-calendar-forward-sync.sh" || failures=$((failures + 1))
+    run_lane "calendar_forward" env GBRAIN_COLLECTOR_RUN_ONCE=1 "$APP_DIR/collector-calendar-forward-sync.sh" || failures=$((failures + 1))
   fi
 
   return "$failures"
