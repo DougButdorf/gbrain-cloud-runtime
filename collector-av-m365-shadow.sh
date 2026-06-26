@@ -85,7 +85,19 @@ for (const file of result.files || []) {
         return 1
       fi
     else
-      printf '{"event":"av_m365_apply_import_skipped","reason":"no_files","ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      local message_count
+      message_count="$(bun -e 'const fs=require("fs"); const result=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(result.messageCount || 0));' "$result_file")"
+      if [[ "$message_count" != "0" ]]; then
+        printf '{"event":"av_m365_apply_no_rendered_files","ok":false,"messageCount":%s,"ts":"%s"}\n' \
+          "$message_count" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+        return 1
+      fi
+      printf '{"event":"av_m365_apply_noop","reason":"no_messages","ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      return 0
+    fi
+    if [[ ! -s "$pending_file" ]]; then
+      printf '{"event":"av_m365_apply_missing_pending_state","ok":false,"ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+      return 1
     fi
     bun "$APP_DIR/collectors/gbrain-av-m365-collector-state-apply-pending.js" --apply --json "$pending_file"
   fi

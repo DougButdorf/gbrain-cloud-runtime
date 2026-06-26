@@ -32,18 +32,36 @@ run_with_timeout() {
 bun "$COLLECTOR_SCRIPT" > "$RESULT_FILE"
 IMPORT_DIR="$(bun -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(r.importDir || "")' "$RESULT_FILE")"
 FILES_COUNT="$(bun -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String((r.files||[]).length))' "$RESULT_FILE")"
+ERRORS_COUNT="$(bun -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String((r.accountErrors||[]).length))' "$RESULT_FILE")"
+
+if [[ "$SHADOW" != "1" && "$ERRORS_COUNT" != "0" ]]; then
+  bun -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); console.error(JSON.stringify({event:"gmail_forward_apply_account_errors",ok:false,errors:r.accountErrors||[],ts:new Date().toISOString()}));' "$RESULT_FILE"
+  exit 1
+fi
 
 if [[ "$FILES_COUNT" != "0" && "$SHADOW" != "1" ]]; then
   run_with_timeout "$IMPORT_TIMEOUT_SECONDS" env HOME="$HOME" bun /opt/gbrain-src/src/cli.ts import "$IMPORT_DIR" --no-embed >/tmp/gbrain-gmail-forward-import.log 2>&1
+  if grep -Eq 'errors=[1-9][0-9]*|, [1-9][0-9]* errors\)|ERROR|Error:' /tmp/gbrain-gmail-forward-import.log; then
+    printf '{"event":"gmail_forward_apply_import_failed","ok":false,"ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+    cat /tmp/gbrain-gmail-forward-import.log >&2
+    exit 1
+  fi
   run_with_timeout "$EMBED_TIMEOUT_SECONDS" env HOME="$HOME" bun /opt/gbrain-src/src/cli.ts embed --stale >/tmp/gbrain-gmail-forward-embed.log 2>&1
+  if grep -Eiq 'requires .*API_KEY|missing .*API_KEY|ERROR|Error:|failed|failure' /tmp/gbrain-gmail-forward-embed.log; then
+    printf '{"event":"gmail_forward_apply_embed_failed","ok":false,"ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+    cat /tmp/gbrain-gmail-forward-embed.log >&2
+    exit 1
+  fi
 fi
 
 if [[ "$SHADOW" != "1" ]]; then
   if [[ "${GBRAIN_COLLECTOR_STATE_ENABLED:-0}" == "1" || "${GBRAIN_COLLECTOR_STATE_BACKEND:-}" == "postgres" ]]; then
     pending_file="$IMPORT_DIR/GMAIL_FORWARD_COLLECTOR_STATE_PENDING.json"
-    if [[ -f "$pending_file" ]]; then
-      bun "$WORKSPACE/collectors/gbrain-gmail-forward-collector-state-apply-pending.js" --apply --json "$pending_file" >/tmp/gbrain-gmail-forward-state.log
+    if [[ ! -s "$pending_file" ]]; then
+      printf '{"event":"gmail_forward_apply_missing_pending_state","ok":false,"ts":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+      exit 1
     fi
+    bun "$WORKSPACE/collectors/gbrain-gmail-forward-collector-state-apply-pending.js" --apply --json "$pending_file" >/tmp/gbrain-gmail-forward-state.log
   else
     for pending in "$STATE_DIR"/*.gmail.forward.historyId.pending; do
       [[ -e "$pending" ]] || continue
