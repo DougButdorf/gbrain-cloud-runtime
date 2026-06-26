@@ -2,6 +2,12 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const {
+  CollectorState,
+  enabledFromEnv: collectorStateEnabledFromEnv,
+  makeRunId,
+  saveJsonFile,
+} = require('./lib/collector-state');
 
 const WORKSPACE = process.env.GBRAIN_WORKSPACE || '/Users/landokeynes/.openclaw/workspace';
 const STATE_DIR = process.env.GBRAIN_GMAIL_FORWARD_STATE_DIR || process.env.GBRAIN_COLLECTOR_STATE_DIR || '/Users/landokeynes/gbrain-phase7/runtime-controlled/state';
@@ -11,6 +17,9 @@ const GWS_HOME = process.env.GBRAIN_GWS_HOME || process.env.GWS_HOME || process.
 const SHADOW = process.env.GBRAIN_COLLECTOR_SHADOW === '1';
 const MAX_PER_ACCOUNT = Number(process.env.GBRAIN_GMAIL_FORWARD_MAX || '25');
 const MAX_BODY_CHARS = Number(process.env.GBRAIN_FULL_EMAIL_MAX_BODY_CHARS || '12000');
+const COLLECTOR_STATE_ENABLED = collectorStateEnabledFromEnv();
+const LANE = process.env.GBRAIN_GMAIL_FORWARD_COLLECTOR_STATE_LANE || 'gmail_forward';
+const HISTORY_IDS_KEY = process.env.GBRAIN_GMAIL_FORWARD_COLLECTOR_STATE_KEY || 'history_ids';
 const accounts = [['doug@outbranch.net','doug-outbranch'],['lando@outbranch.net','lando-outbranch'],['doug@boostpricing.com','doug-boostpricing'],['dbutdorf@gmail.com','dbutdorf']];
 
 function runGws(account, serviceArgs, params) {
@@ -24,6 +33,16 @@ function slugPart(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]+/
 function yamlString(s) { return JSON.stringify(String(s || '')); }
 function inferContext(text) { const s = String(text || '').toLowerCase(); if (s.includes('advanced virology') || s.includes('advancedvirology') || s.includes('vmrd') || s.includes('gilded') || s.includes('gi vax') || s.includes('microbiologics')) return 'context:advanced-virology'; if (s.includes('boostpricing') || s.includes('boost pricing') || s.includes('vistage')) return 'context:boost-pricing'; if (s.includes('stackbroker') || s.includes('agentincent') || s.includes('bountymesh') || s.includes('outbranch')) return 'context:outbranch-network'; if (s.includes('amtrak') || s.includes('airbnb') || s.includes('hotel') || s.includes('avis') || s.includes('flight') || s.includes('restaurant')) return 'context:personal'; return 'context:outbranch-network'; }
 function statePath(slug) { return path.join(STATE_DIR, slug + '.gmail.forward.historyId'); }
+
+function historyIdFromState(state, slug) {
+  const raw = state && state.historyIds && state.historyIds[slug];
+  return raw == null ? '' : String(raw).trim();
+}
+
+function readFileHistoryId(slug) {
+  const sp = statePath(slug);
+  return fs.existsSync(sp) ? fs.readFileSync(sp, 'utf8').trim() : '';
+}
 
 function writeMessage(outDir, account, msg) {
   const headers = msg.payload && msg.payload.headers || [];
@@ -40,11 +59,28 @@ function writeMessage(outDir, account, msg) {
   return filePath;
 }
 
-function main() {
+async function main() {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   const importDir = path.join(OUT_ROOT, 'batch-' + new Date().toISOString().replace(/[:.]/g, '-'));
   fs.mkdirSync(path.join(importDir, 'emails'), { recursive: true });
-  const result = { importDir, shadow: SHADOW, baselineOnly: [], accounts: [], accountErrors: [], files: [] };
+  const collectorState = new CollectorState();
+  const runId = makeRunId('gmail-forward');
+  let durableHistoryState = null;
+  if (COLLECTOR_STATE_ENABLED) {
+    durableHistoryState = await collectorState.getState(LANE, HISTORY_IDS_KEY, null);
+  }
+  const result = {
+    importDir,
+    shadow: SHADOW,
+    collectorStateEnabled: COLLECTOR_STATE_ENABLED,
+    collectorStateSource: durableHistoryState ? 'postgres' : 'file',
+    collectorStateLane: COLLECTOR_STATE_ENABLED ? LANE : '',
+    baselineOnly: [],
+    accounts: [],
+    accountErrors: [],
+    files: [],
+  };
+  const pendingHistoryIds = durableHistoryState && durableHistoryState.historyIds ? Object.assign({}, durableHistoryState.historyIds) : {};
   for (const pair of accounts) {
     const account = pair[0], slug = pair[1], sp = statePath(pair[1]);
     let profile;
@@ -54,12 +90,20 @@ function main() {
       result.accountErrors.push({ account, error: String(err && err.message || err).split('\n')[0] });
       continue;
     }
-    if (!fs.existsSync(sp)) {
-      if (!SHADOW) fs.writeFileSync(sp, String(profile.historyId), { mode: 0o600 });
-      result.baselineOnly.push({ account, historyId: profile.historyId, stateWritten: !SHADOW });
+    const existingHistoryId = COLLECTOR_STATE_ENABLED ? historyIdFromState(durableHistoryState, slug) : readFileHistoryId(slug);
+    if (!existingHistoryId) {
+      pendingHistoryIds[slug] = String(profile.historyId);
+      if (!COLLECTOR_STATE_ENABLED && !SHADOW) fs.writeFileSync(sp, String(profile.historyId), { mode: 0o600 });
+      result.baselineOnly.push({
+        account,
+        slug,
+        historyId: profile.historyId,
+        stateWritten: !COLLECTOR_STATE_ENABLED && !SHADOW,
+        pendingCollectorState: COLLECTOR_STATE_ENABLED && !SHADOW,
+      });
       continue;
     }
-    const startHistoryId = fs.readFileSync(sp, 'utf8').trim();
+    const startHistoryId = existingHistoryId;
     let pageToken = '', latestHistoryId = profile.historyId;
     const messageIds = [];
     do {
@@ -91,9 +135,22 @@ function main() {
     }
     result.accounts.push({ account, startHistoryId, latestHistoryId, seen: messageIds.length, written: files.length });
     result.files.push.apply(result.files, files);
-    if (!SHADOW) fs.writeFileSync(sp + '.pending', String(latestHistoryId), { mode: 0o600 });
+    if (!SHADOW) {
+      if (COLLECTOR_STATE_ENABLED) {
+        pendingHistoryIds[slug] = String(latestHistoryId);
+      } else {
+        fs.writeFileSync(sp + '.pending', String(latestHistoryId), { mode: 0o600 });
+      }
+    }
+  }
+  if (COLLECTOR_STATE_ENABLED && !SHADOW) {
+    const pendingFile = path.join(importDir, 'GMAIL_FORWARD_COLLECTOR_STATE_PENDING.json');
+    const pending = { lane: LANE, key: HISTORY_IDS_KEY, payload: { historyIds: pendingHistoryIds }, runId };
+    saveJsonFile(pendingFile, pending);
+    result.collectorStatePendingFile = pendingFile;
   }
   fs.writeFileSync(path.join(importDir, 'GMAIL_FORWARD_BATCH.md'), '# Gmail Forward-Only Batch\n\n' + JSON.stringify(result, null, 2) + '\n', { mode: 0o600 });
   console.log(JSON.stringify(result, null, 2));
+  await collectorState.close();
 }
-try { main(); } catch (err) { console.error(err && err.stack ? err.stack : String(err)); process.exit(1); }
+main().catch((err) => { console.error(err && err.stack ? err.stack : String(err)); process.exit(1); });
