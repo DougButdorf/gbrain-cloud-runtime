@@ -20,7 +20,26 @@ const MAX_BODY_CHARS = Number(process.env.GBRAIN_FULL_EMAIL_MAX_BODY_CHARS || '1
 const COLLECTOR_STATE_ENABLED = collectorStateEnabledFromEnv();
 const LANE = process.env.GBRAIN_GMAIL_FORWARD_COLLECTOR_STATE_LANE || 'gmail_forward';
 const HISTORY_IDS_KEY = process.env.GBRAIN_GMAIL_FORWARD_COLLECTOR_STATE_KEY || 'history_ids';
-const accounts = [['doug@outbranch.net','doug-outbranch'],['lando@outbranch.net','lando-outbranch'],['doug@boostpricing.com','doug-boostpricing'],['dbutdorf@gmail.com','dbutdorf']];
+const DEFAULT_ACCOUNTS = [['doug@outbranch.net','doug-outbranch'],['lando@outbranch.net','lando-outbranch'],['doug@boostpricing.com','doug-boostpricing'],['dbutdorf@gmail.com','dbutdorf']];
+
+function selectedAccounts() {
+  const raw = process.env.GBRAIN_GMAIL_FORWARD_ACCOUNTS || '';
+  const wanted = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (!wanted.length) return DEFAULT_ACCOUNTS;
+  const byEmail = new Map(DEFAULT_ACCOUNTS.map((pair) => [pair[0], pair]));
+  const bySlug = new Map(DEFAULT_ACCOUNTS.map((pair) => [pair[1], pair]));
+  const selected = [];
+  const unknown = [];
+  for (const item of wanted) {
+    const pair = byEmail.get(item) || bySlug.get(item);
+    if (pair) selected.push(pair);
+    else unknown.push(item);
+  }
+  if (unknown.length) throw new Error(`Unknown GBRAIN_GMAIL_FORWARD_ACCOUNTS entries: ${unknown.join(', ')}`);
+  return selected;
+}
+
+const accounts = selectedAccounts();
 
 function runGws(account, serviceArgs, params) {
   return JSON.parse(execFileSync(GWS, [account, 'gmail'].concat(serviceArgs, ['--params', JSON.stringify(params), '--format', 'json']), { cwd: WORKSPACE, env: Object.assign({}, process.env, { HOME: GWS_HOME }), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));

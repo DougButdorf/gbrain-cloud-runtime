@@ -9,11 +9,16 @@ RUN_ROOT="${GBRAIN_CALENDAR_FORWARD_RUN_ROOT:-${GBRAIN_COLLECTOR_OUT_ROOT:-/User
 SHADOW="${GBRAIN_COLLECTOR_SHADOW:-0}"
 MAX="${GBRAIN_CALENDAR_FORWARD_MAX:-100}"
 DAYS="${GBRAIN_CALENDAR_CHECKPOINT_DAYS:-30}"
-ACCOUNTS=(
-  "doug@outbranch.net"
-  "doug@boostpricing.com"
-  "dbutdorf@gmail.com"
-)
+export GBRAIN_CALENDAR_FORWARD_ACCOUNTS="${GBRAIN_CALENDAR_FORWARD_ACCOUNTS:-doug@outbranch.net,doug@boostpricing.com}"
+if [[ -n "${GBRAIN_CALENDAR_FORWARD_ACCOUNTS:-}" ]]; then
+  IFS=',' read -r -a ACCOUNTS <<<"$GBRAIN_CALENDAR_FORWARD_ACCOUNTS"
+else
+  ACCOUNTS=(
+    "doug@outbranch.net"
+    "doug@boostpricing.com"
+    "dbutdorf@gmail.com"
+  )
+fi
 
 mkdir -p "$RUN_ROOT"
 
@@ -26,9 +31,11 @@ fi
 
 total=0
 for account in "${ACCOUNTS[@]}"; do
+  account="$(printf '%s' "$account" | xargs)"
+  [[ -n "$account" ]] || continue
   slug="$(printf '%s' "$account" | tr -c '[:alnum:]' '-')"
   out_dir="$RUN_ROOT/$slug"
-  result_file="$(mktemp /tmp/gbrain-calendar-forward.XXXXXX.json)"
+  result_file="$(mktemp /tmp/gbrain-calendar-forward.XXXXXX)"
   GBRAIN_WORKSPACE="$WORKSPACE" GBRAIN_GWS_HOME="$HOME" GBRAIN_CALENDAR_CHECKPOINT_DAYS="$DAYS" bun "$COLLECTOR_SCRIPT" "$account" "$MAX" "$out_dir" >"$result_file"
   count="$(bun -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(r.count || 0));' "$result_file")"
   total=$((total + count))

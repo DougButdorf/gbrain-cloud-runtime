@@ -11,12 +11,31 @@ const {
 const STATE_DIR = process.env.GBRAIN_GMAIL_FORWARD_STATE_DIR || process.env.GBRAIN_COLLECTOR_STATE_DIR || '/Users/landokeynes/gbrain-phase7/runtime-controlled/state';
 const LANE = process.env.GBRAIN_GMAIL_FORWARD_COLLECTOR_STATE_LANE || 'gmail_forward';
 const KEY = process.env.GBRAIN_GMAIL_FORWARD_COLLECTOR_STATE_KEY || 'history_ids';
-const ACCOUNTS = [
+const DEFAULT_ACCOUNTS = [
   ['doug@outbranch.net', 'doug-outbranch'],
   ['lando@outbranch.net', 'lando-outbranch'],
   ['doug@boostpricing.com', 'doug-boostpricing'],
   ['dbutdorf@gmail.com', 'dbutdorf'],
 ];
+
+function selectedAccounts() {
+  const raw = process.env.GBRAIN_GMAIL_FORWARD_ACCOUNTS || '';
+  const wanted = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (!wanted.length) return DEFAULT_ACCOUNTS;
+  const byEmail = new Map(DEFAULT_ACCOUNTS.map((pair) => [pair[0], pair]));
+  const bySlug = new Map(DEFAULT_ACCOUNTS.map((pair) => [pair[1], pair]));
+  const selected = [];
+  const unknown = [];
+  for (const item of wanted) {
+    const pair = byEmail.get(item) || bySlug.get(item);
+    if (pair) selected.push(pair);
+    else unknown.push(item);
+  }
+  if (unknown.length) throw new Error(`Unknown GBRAIN_GMAIL_FORWARD_ACCOUNTS entries: ${unknown.join(', ')}`);
+  return selected;
+}
+
+const ACCOUNTS = selectedAccounts();
 
 function parseArgs(argv) {
   return {

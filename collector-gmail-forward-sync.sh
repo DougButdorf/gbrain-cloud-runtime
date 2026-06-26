@@ -4,6 +4,7 @@ set -euo pipefail
 export HOME="${GBRAIN_GWS_HOME:-${HOME:-/Users/landokeynes}}"
 WORKSPACE="${GBRAIN_WORKSPACE:-/app}"
 export GBRAIN_COLLECTOR_STATE_ENABLED="${GBRAIN_COLLECTOR_STATE_ENABLED:-1}"
+export GBRAIN_GMAIL_FORWARD_ACCOUNTS="${GBRAIN_GMAIL_FORWARD_ACCOUNTS:-doug-outbranch,lando-outbranch,doug-boostpricing}"
 COLLECTOR_SCRIPT="${GBRAIN_GMAIL_FORWARD_SCRIPT:-$WORKSPACE/collectors/gbrain-gmail-forward-sync.js}"
 ENV_FILE="${GBRAIN_ENV_FILE:-/Users/landokeynes/.gbrain/.env}"
 STATE_DIR="${GBRAIN_GMAIL_FORWARD_STATE_DIR:-${GBRAIN_COLLECTOR_STATE_DIR:-/Users/landokeynes/gbrain-phase7/runtime-controlled/state}}"
