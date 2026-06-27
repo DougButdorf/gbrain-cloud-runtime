@@ -1,7 +1,7 @@
 FROM oven/bun:1.3.13-slim
 
 ARG GBRAIN_REPO=https://github.com/garrytan/gbrain.git
-ARG GBRAIN_GIT_REF=9bf96db807c2f050449142f2f0b05726f58e5054
+ARG GBRAIN_GIT_REF=814258dda67945ffec9457a1e73980e947b7e462
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git procps \

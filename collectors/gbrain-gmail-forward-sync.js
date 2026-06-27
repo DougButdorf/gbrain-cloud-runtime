@@ -97,6 +97,7 @@ async function main() {
     baselineOnly: [],
     accounts: [],
     accountErrors: [],
+    skippedMessages: [],
     files: [],
   };
   const pendingHistoryIds = durableHistoryState && durableHistoryState.historyIds ? Object.assign({}, durableHistoryState.historyIds) : {};
@@ -145,7 +146,7 @@ async function main() {
       try {
         msg = runGws(account, ['users','messages','get'], { userId: 'me', id, format: 'full', metadataHeaders: ['From','To','Cc','Subject','Date'] });
       } catch (err) {
-        result.accountErrors.push({ account, messageId: id, error: String(err && err.message || err).split('\n')[0] });
+        result.skippedMessages.push({ account, messageId: id, reason: 'message-get-failed', error: String(err && err.message || err).split('\n')[0] });
         continue;
       }
       const labels = msg.labelIds || [];
